@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini-SIEM Dashboard</title>
+    <style>
+        :root {
+            --bg: #0b1220;
+            --panel: #111a2b;
+            --panel-2: #172338;
+            --text: #edf2f7;
+            --muted: #9fb0c8;
+            --border: #28364f;
+            --green: #28c76f;
+            --yellow: #ff9f43;
+            --red: #ea5455;
+            --blue: #00cfe8;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: linear-gradient(180deg, #09111d 0%, #0e1728 100%);
+            color: var(--text);
+        }
+        .container { width: min(1220px, 94vw); margin: 24px auto 40px; }
+        .header {
+            display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+            margin-bottom: 22px;
+        }
+        h1 { margin: 0; font-size: 30px; }
+        p { color: var(--muted); }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn, button {
+            padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--panel-2); color: var(--text); text-decoration: none; cursor: pointer; font-weight: 700;
+        }
+        .btn:hover, button:hover { filter: brightness(1.1); }
+        .upload-box, .panel {
+            background: rgba(17, 26, 43, 0.92);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: 0 14px 30px rgba(0,0,0,0.18);
+        }
+        .grid { display: grid; gap: 16px; }
+        .stats { grid-template-columns: repeat(4, 1fr); margin-bottom: 18px; }
+        .stat h3 { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+        .stat .value { font-size: 28px; font-weight: 800; }
+        .layout { grid-template-columns: 1.3fr 1fr; align-items: start; }
+        .cards2 { grid-template-columns: 1fr 1fr; }
+        table {
+            width: 100%; border-collapse: collapse; font-size: 14px;
+        }
+        th, td {
+            padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top;
+        }
+        th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+        .badge {
+            display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700;
+        }
+        .critical { background: rgba(234, 84, 85, 0.15); color: #ff8d90; }
+        .high { background: rgba(255, 159, 67, 0.15); color: #ffc27f; }
+        .medium { background: rgba(0, 207, 232, 0.15); color: #75eaf6; }
+        .success { background: rgba(40, 199, 111, 0.15); color: #72e2a1; }
+        .flash { margin-bottom: 14px; padding: 12px 14px; border-radius: 12px; }
+        .flash.success { background: rgba(40, 199, 111, 0.12); border: 1px solid rgba(40, 199, 111, 0.35); }
+        .flash.error { background: rgba(234, 84, 85, 0.12); border: 1px solid rgba(234, 84, 85, 0.35); }
+        .bars { display: flex; align-items: end; gap: 8px; min-height: 220px; padding-top: 18px; }
+        .bar-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }
+        .bar { width: 100%; background: linear-gradient(180deg, #00cfe8 0%, #7367f0 100%); border-radius: 12px 12px 0 0; min-height: 8px; }
+        .mini { color: var(--muted); font-size: 11px; text-align: center; }
+        code { color: #9ad9ff; }
+        @media (max-width: 900px) {
+            .stats, .layout, .cards2 { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            <h1>Mini-SIEM: Log Monitoring & Alert Dashboard</h1>
+            <p>Upload SSH, web, or login logs. The system parses them, stores them in SQLite, runs detections, and shows alerts.</p>
+        </div>
+        <div class="actions">
+            <a class="btn" href="/seed">Load Demo Attacks</a>
+            <a class="btn" href="/reset">Reset Data</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="upload-box" style="margin-bottom: 18px;">
+        <form action="/upload" method="post" enctype="multipart/form-data" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+            <input type="file" name="logfile" accept=".log,.txt,.csv" required />
+            <button type="submit">Upload Logs</button>
+            <span style="color: var(--muted);">Supported examples: SSH failed password logs, simple login logs, Apache/Nginx style request lines.</span>
+        </form>
+    </div>
+
+    <div class="grid stats">
+        <div class="panel stat"><h3>Total Events</h3><div class="value">{{ counts.events }}</div></div>
+        <div class="panel stat"><h3>Total Alerts</h3><div class="value">{{ counts.alerts }}</div></div>
+        <div class="panel stat"><h3>Critical Alerts</h3><div class="value">{{ counts.critical }}</div></div>
+        <div class="panel stat"><h3>High Alerts</h3><div class="value">{{ counts.high }}</div></div>
+    </div>
+
+    <div class="grid layout">
+        <div class="panel">
+            <h2>Attack Timeline</h2>
+            <p>Alert volume by hour.</p>
+            <div class="bars">
+                {% for item in timeline %}
+                <div class="bar-wrap">
+                    <div class="bar" style="height: {{ (item['total'] * 28) + 8 }}px;"></div>
+                    <div class="mini">{{ item['total'] }}</div>
+                    <div class="mini">{{ item['bucket'][11:13] }}h</div>
+                </div>
+                {% else %}
+                <p>No alerts yet. Upload logs or load demo data.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="grid cards2">
+            <div class="panel">
+                <h2>Top IPs</h2>
+                <table>
+                    <thead><tr><th>IP</th><th>Events</th></tr></thead>
+                    <tbody>
+                    {% for item in top_ips %}
+                        <tr><td><code>{{ item['source_ip'] }}</code></td><td>{{ item['total'] }}</td></tr>
+                    {% else %}
+                        <tr><td colspan="2">No IP data yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="panel">
+                <h2>Detection Coverage</h2>
+                <table>
+                    <tbody>
+                        <tr><td>Brute force login attempts</td><td>✅</td></tr>
+                        <tr><td>Password spraying</td><td>✅</td></tr>
+                        <tr><td>Suspicious IP behaviour</td><td>✅</td></tr>
+                        <tr><td>Impossible travel login</td><td>✅</td></tr>
+                        <tr><td>Too many requests / DoS pattern</td><td>✅</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid layout" style="margin-top:18px;">
+        <div class="panel">
+            <h2>Recent Alerts</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>Time</th><th>Type</th><th>Severity</th><th>IP</th><th>User</th><th>Description</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for alert in recent_alerts %}
+                    <tr>
+                        <td>{{ alert['detected_at'] }}</td>
+                        <td>{{ alert['alert_type'] }}</td>
+                        <td><span class="badge {{ alert['severity'] }}">{{ alert['severity'] }}</span></td>
+                        <td>{{ alert['source_ip'] or '-' }}</td>
+                        <td>{{ alert['username'] or '-' }}</td>
+                        <td>{{ alert['description'] }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="6">No alerts yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="panel">
+            <h2>Recent Raw Events</h2>
+            <table>
+                <thead><tr><th>Time</th><th>Type</th><th>Status</th><th>IP</th><th>Log</th></tr></thead>
+                <tbody>
+                {% for event in recent_events %}
+                    <tr>
+                        <td>{{ event['timestamp'] }}</td>
+                        <td>{{ event['event_type'] }}</td>
+                        <td>{% if event['status'] == 'success' %}<span class="badge success">success</span>{% else %}{{ event['status'] }}{% endif %}</td>
+                        <td>{{ event['source_ip'] or '-' }}</td>
+                        <td><code>{{ event['raw_log'] }}</code></td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="5">No events yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>
