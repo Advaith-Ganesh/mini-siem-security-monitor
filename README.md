@@ -43,7 +43,7 @@ HTML – dashboard interface
 
 You can either clone the repository using Git:
 
-git clone https://github.com/YOURUSERNAME/mini-siem-security-monitor
+git clone https://github.com/Advaith-Ganesh/mini-siem-security-monitor
 
 Or download the ZIP file from GitHub and extract it.
 
