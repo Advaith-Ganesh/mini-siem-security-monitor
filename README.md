@@ -63,7 +63,8 @@ sample is useful for parsing but does not meet every detection threshold.
   Consequently, the current demo's `GET ... status=200` lines do not exercise
   the high-request-rate rule.
 - Re-uploading the same file inserts duplicate events.
-- There is no automated test suite or CI workflow yet.
+- CI smoke-checks dashboard rendering and sample-log uploads. Detection rules
+  do not yet have dedicated unit tests.
 - The development server has debug mode enabled and a fixed demo session key.
   Seed/reset routes change data through GET requests; authentication and CSRF
   protection are absent. Run it locally with sample data.
