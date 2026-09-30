@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check syntax
+        run: python -m py_compile app.py
+      - name: Check dashboard and sample upload
+        run: |
+          python - <<'PY'
+          import io
+          import os
+          import tempfile
+
+          import app as siem
+
+          with tempfile.TemporaryDirectory() as directory:
+              siem.DB_PATH = os.path.join(directory, "siem.db")
+              siem.app.config["TESTING"] = True
+              siem.init_db()
+              with siem.app.test_client() as client:
+                  response = client.get("/")
+                  assert response.status_code == 200, response.status_code
+                  with open("sample_logs.txt", "rb") as sample:
+                      response = client.post(
+                          "/upload",
+                          data={"logfile": (io.BytesIO(sample.read()), "sample_logs.txt")},
+                          content_type="multipart/form-data",
+                          follow_redirects=True,
+                      )
+                  assert response.status_code == 200, response.status_code
+                  with siem.app.app_context():
+                      count = siem.get_db().execute("SELECT COUNT(*) FROM events").fetchone()[0]
+                      assert count == 7, count
+          PY
