@@ -16,7 +16,7 @@ from flask import Flask, flash, g, redirect, render_template, request, url_for
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "siem.db")
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=BASE_DIR)
 app.config["SECRET_KEY"] = "mini-siem-demo-secret"
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
 
